@@ -1,0 +1,22 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+[functions]
+  node_bundler = "esbuild"
+
+  [functions.admin-trigger-generation]
+    timeout = 30
+  [functions.admin-trigger-resolution]
+    timeout = 30
+  [functions.admin-trigger-season]
+    timeout = 30
