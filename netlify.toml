@@ -14,7 +14,7 @@
 [dev]
   command = "npm run dev"
   targetPort = 5173
-  port = 8080
+  port = 8081
 
 [functions]
   node_bundler = "esbuild"
