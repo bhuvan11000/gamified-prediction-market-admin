@@ -6,7 +6,6 @@ import {
   AlertTriangle,
   Clock,
   MessageSquare,
-  Activity,
 } from 'lucide-react';
 import StatCard from '@/components/StatCard';
 import { formatDateTime } from '@/lib/format';
@@ -17,11 +16,14 @@ export default function Dashboard() {
   const { data: counts, isLoading } = useQuery({
     queryKey: ['admin-dashboard'],
     queryFn: async () => {
-      const [users, open, review, pending, proposals, genLog] = await Promise.all([
+      const today630 = new Date();
+      today630.setUTCHours(6, 30, 0, 0);
+
+      const [users, open, review, draftsToday, proposals, genLog] = await Promise.all([
         supabase.from('users').select('id', { count: 'exact', head: true }),
         supabase.from('markets').select('id', { count: 'exact', head: true }).eq('status', 'open'),
         supabase.from('markets').select('id', { count: 'exact', head: true }).eq('status', 'review'),
-        supabase.from('markets').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+        supabase.from('markets').select('id', { count: 'exact', head: true }).eq('status', 'draft').lte('opens_at', today630.toISOString()),
         supabase.from('community_proposals').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
         supabase.from('market_generation_log').select('*').order('created_at', { ascending: false }).limit(1).maybeSingle(),
       ]);
@@ -30,7 +32,7 @@ export default function Dashboard() {
         totalPlayers: users.count ?? 0,
         activeMarkets: open.count ?? 0,
         needsReview: review.count ?? 0,
-        pendingAi: pending.count ?? 0,
+        draftsForToday: draftsToday.count ?? 0,
         pendingProposals: proposals.count ?? 0,
         lastGeneration: genLog.data || null,
       };
@@ -40,9 +42,9 @@ export default function Dashboard() {
 
   const stats = [
     { label: 'Total Players', value: counts?.totalPlayers, icon: Users, color: '#4f7df5', linkTo: '/players' },
-    { label: 'Active Markets', value: counts?.activeMarkets, icon: BarChart3, color: '#22c55e', linkTo: '/markets' },
+    { label: 'Live Markets', value: counts?.activeMarkets, icon: BarChart3, color: '#22c55e', linkTo: '/markets' },
     { label: 'Needs Review', value: counts?.needsReview, icon: AlertTriangle, color: '#f59e0b', linkTo: '/markets/review' },
-    { label: 'Pending AI Markets', value: counts?.pendingAi, icon: Clock, color: '#a855f7', linkTo: '/markets/approval' },
+    { label: 'Drafts for Today', value: counts?.draftsForToday, icon: Clock, color: '#a855f7', linkTo: '/markets?section=drafts' },
     { label: 'Pending Proposals', value: counts?.pendingProposals, icon: MessageSquare, color: '#3b82f6', linkTo: '/markets' },
   ];
 

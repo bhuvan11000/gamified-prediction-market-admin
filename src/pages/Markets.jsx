@@ -1,21 +1,21 @@
 import { useState } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { api } from '@/lib/api';
-import { formatDateTime, formatDate } from '@/lib/format';
+import { formatDateTime, formatDate, formatTimeRemaining } from '@/lib/format';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import Spinner from '@/components/ui/Spinner';
 import Modal from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
 import {
-  CheckCircle, XCircle, AlertTriangle, Plus, ExternalLink, Edit3,
+  CheckCircle, XCircle, AlertTriangle, Plus, ExternalLink, Trash2, Clock,
 } from 'lucide-react';
 import styles from './Markets.module.css';
 
 const SECTIONS = [
-  { key: 'approval', label: 'AI Approval Queue' },
+  { key: 'drafts', label: 'Draft Queue' },
   { key: 'review', label: 'Dispute Resolution' },
   { key: 'create', label: 'Manual Creation' },
 ];
@@ -23,6 +23,7 @@ const SECTIONS = [
 const CATEGORIES = ['sports', 'tech', 'popculture', 'politics', 'memes'];
 
 const STATUS_BADGE = {
+  draft: { variant: 'warning', label: 'Draft' },
   pending: { variant: 'warning', label: 'Pending' },
   open: { variant: 'success', label: 'Open' },
   closed: { variant: 'default', label: 'Closed' },
@@ -33,22 +34,25 @@ const STATUS_BADGE = {
   rejected: { variant: 'danger', label: 'Rejected' },
 };
 
+const SOURCE_LABELS = {
+  ai: 'Daily',
+  admin: 'Admin',
+  community: 'Community',
+};
+
 export default function Markets() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const section = searchParams.get('section') || 'approval';
-  const navigate = useNavigate();
+  const section = searchParams.get('section') || 'drafts';
   const queryClient = useQueryClient();
   const { addToast } = useToast();
 
-  const [editModal, setEditModal] = useState(null);
-  const [editForm, setEditForm] = useState({});
   const [confirmModal, setConfirmModal] = useState(null);
   const [acting, setActing] = useState(false);
 
-  const pendingQuery = useQuery({
-    queryKey: ['markets-pending'],
-    queryFn: () => supabase.from('markets').select('*').eq('status', 'pending').order('created_at', { ascending: false }),
-    enabled: section === 'approval',
+  const draftQuery = useQuery({
+    queryKey: ['markets-drafts'],
+    queryFn: () => supabase.from('markets').select('*').eq('status', 'draft').order('created_at', { ascending: false }),
+    enabled: section === 'drafts',
   });
 
   const reviewQuery = useQuery({
@@ -57,18 +61,13 @@ export default function Markets() {
     enabled: section === 'review',
   });
 
-  async function handleApproveReject(marketId, action) {
+  async function handleDelete(marketId) {
     setActing(true);
     try {
-      const body = { market_id: marketId, action };
-      if (editModal?.id === marketId && Object.keys(editForm).length > 0) {
-        body.edits = editForm;
-      }
-      await api.post('/admin-approve-market', body);
-      addToast(`Market ${action === 'approve' ? 'approved' : 'rejected'}`, 'success');
-      setEditModal(null);
-      setEditForm({});
-      pendingQuery.refetch();
+      await api.post('/admin-delete-market', { market_id: marketId });
+      addToast('Draft deleted', 'success');
+      setConfirmModal(null);
+      draftQuery.refetch();
       queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] });
     } catch (err) {
       addToast(err.message, 'error');
@@ -107,17 +106,6 @@ export default function Markets() {
     }
   }
 
-  function openEdit(market) {
-    setEditForm({
-      title: market.title,
-      description: market.description,
-      category: market.category,
-      resolution_criteria: market.resolution_criteria,
-      closes_at: market.closes_at?.split('T')[0] || '',
-    });
-    setEditModal(market);
-  }
-
   return (
     <div className={styles.page}>
       <h1 className={styles.title}>Markets</h1>
@@ -134,19 +122,19 @@ export default function Markets() {
         ))}
       </div>
 
-      {/* ── AI APPROVAL QUEUE ── */}
-      {section === 'approval' && (
+      {/* ── DRAFT QUEUE ── */}
+      {section === 'drafts' && (
         <div>
-          {pendingQuery.isLoading ? (
+          {draftQuery.isLoading ? (
             <div className={styles.loadingWrap}><Spinner size={24} /></div>
-          ) : pendingQuery.data?.data?.length === 0 ? (
+          ) : draftQuery.data?.data?.length === 0 ? (
             <div className={styles.emptyState}>
-              <CheckCircle size={40} className={styles.emptyIcon} />
-              <p>No pending AI markets to review.</p>
+              <Clock size={40} className={styles.emptyIcon} />
+              <p>No drafts pending publication.</p>
             </div>
           ) : (
             <div className={styles.queue}>
-              {pendingQuery.data?.data?.map((market) => (
+              {draftQuery.data?.data?.map((market) => (
                 <div key={market.id} className={styles.marketCard}>
                   <div className={styles.marketHeader}>
                     <h3 className={styles.marketTitle}>{market.title}</h3>
@@ -154,17 +142,16 @@ export default function Markets() {
                   </div>
                   <p className={styles.marketDesc}>{market.description}</p>
                   <div className={styles.marketMeta}>
+                    <span><strong>Source:</strong> {SOURCE_LABELS[market.source] || market.source}</span>
                     <span><strong>Category:</strong> {market.category}</span>
                     <span><strong>Created:</strong> {formatDateTime(market.created_at)}</span>
-                    <span><strong>Closes:</strong> {formatDate(market.closes_at)}</span>
                   </div>
-                  <p className={styles.marketCriteria}><strong>Resolution:</strong> {market.resolution_criteria}</p>
+                  <p className={styles.marketCriteria}>
+                    <strong>Auto-publishes:</strong> {formatTimeRemaining(market.opens_at)}
+                  </p>
                   <div className={styles.marketActions}>
-                    <Button variant="yes" size="sm" onClick={() => openEdit(market)} disabled={acting}>
-                      <Edit3 size={14} /> Review & Approve
-                    </Button>
-                    <Button variant="no" size="sm" onClick={() => setConfirmModal({ type: 'reject', marketId: market.id, title: market.title })} disabled={acting}>
-                      <XCircle size={14} /> Reject
+                    <Button variant="danger" size="sm" onClick={() => setConfirmModal({ type: 'delete', marketId: market.id, title: market.title })} disabled={acting}>
+                      <Trash2 size={14} /> Delete Draft
                     </Button>
                   </div>
                 </div>
@@ -219,53 +206,19 @@ export default function Markets() {
       {/* ── MANUAL CREATION ── */}
       {section === 'create' && <CreateMarketForm onCreated={() => { addToast('Market created', 'success'); queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] }); }} />}
 
-      {/* ── EDIT MODAL ── */}
-      <Modal open={!!editModal} onClose={() => { setEditModal(null); setEditForm({}); }} title="Review Market" width="600px">
-        <div className={styles.editForm}>
-          <label className={styles.field}>
-            <span className={styles.fieldLabel}>Title</span>
-            <input className={styles.input} value={editForm.title || ''} onChange={(e) => setEditForm(f => ({ ...f, title: e.target.value }))} />
-          </label>
-          <label className={styles.field}>
-            <span className={styles.fieldLabel}>Description</span>
-            <textarea className={`${styles.input} ${styles.textarea}`} value={editForm.description || ''} onChange={(e) => setEditForm(f => ({ ...f, description: e.target.value }))} />
-          </label>
-          <label className={styles.field}>
-            <span className={styles.fieldLabel}>Category</span>
-            <select className={styles.input} value={editForm.category || ''} onChange={(e) => setEditForm(f => ({ ...f, category: e.target.value }))}>
-              {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </label>
-          <label className={styles.field}>
-            <span className={styles.fieldLabel}>Resolution Criteria</span>
-            <textarea className={`${styles.input} ${styles.textarea}`} value={editForm.resolution_criteria || ''} onChange={(e) => setEditForm(f => ({ ...f, resolution_criteria: e.target.value }))} />
-          </label>
-          <label className={styles.field}>
-            <span className={styles.fieldLabel}>Close Date</span>
-            <input className={styles.input} type="date" value={editForm.closes_at || ''} onChange={(e) => setEditForm(f => ({ ...f, closes_at: e.target.value }))} />
-          </label>
-          <div className={styles.editActions}>
-            <Button variant="ghost" onClick={() => { setEditModal(null); setEditForm({}); }}>Cancel</Button>
-            <Button variant="yes" onClick={() => handleApproveReject(editModal.id, 'approve')} disabled={acting}>
-              {acting ? <Spinner size={14} /> : <CheckCircle size={14} />} Approve
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
       {/* ── CONFIRM MODAL ── */}
       <Modal open={!!confirmModal} onClose={() => setConfirmModal(null)} title="Confirm Action" width="400px">
         <p className={styles.confirmText}>
-          {confirmModal?.type === 'reject' && `Are you sure you want to reject "${confirmModal?.title}"?`}
+          {confirmModal?.type === 'delete' && `Delete draft "${confirmModal?.title}"? This cannot be undone.`}
           {confirmModal?.type === 'resolve-yes' && `Resolve "${confirmModal?.title}" as YES? This will pay out YES position holders.`}
           {confirmModal?.type === 'resolve-no' && `Resolve "${confirmModal?.title}" as NO? This will pay out NO position holders.`}
           {confirmModal?.type === 'cancel' && `Cancel "${confirmModal?.title}" and refund all participants?`}
         </p>
         <div className={styles.confirmActions}>
           <Button variant="ghost" onClick={() => setConfirmModal(null)}>Go Back</Button>
-          {confirmModal?.type === 'reject' && (
-            <Button variant="danger" onClick={() => handleApproveReject(confirmModal.marketId, 'reject')} disabled={acting}>
-              {acting ? <Spinner size={14} /> : null} Reject Market
+          {confirmModal?.type === 'delete' && (
+            <Button variant="danger" onClick={() => handleDelete(confirmModal.marketId)} disabled={acting}>
+              {acting ? <Spinner size={14} /> : null} Delete Draft
             </Button>
           )}
           {confirmModal?.type === 'resolve-yes' && (

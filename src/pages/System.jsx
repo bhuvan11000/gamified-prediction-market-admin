@@ -13,10 +13,10 @@ import {
 import styles from './System.module.css';
 
 const TRIGGERS = [
-  { key: 'generation', label: 'Generate Markets Now', icon: Activity, description: 'Run the Gemini market generation cron', endpoint: 'admin-trigger-generation', color: '#4f7df5' },
-  { key: 'resolution', label: 'Resolve Markets Now', icon: Play, description: 'Find expired markets and resolve via Gemini', endpoint: 'admin-trigger-resolution', color: '#22c55e' },
-  { key: 'season', label: 'Run Season Transition', icon: RefreshCw, description: 'End current season, award rewards, start new season', endpoint: 'admin-trigger-season', color: '#f59e0b' },
-  { key: 'reset-quests', label: 'Reset Expired Quests', icon: RotateCcw, description: 'Clean up expired daily/weekly quests', endpoint: 'admin-trigger-reset-quests', color: '#a855f7' },
+  { key: 'generation', label: 'Generate Markets Now', icon: Activity, description: 'Proxies to main app /api/generate-markets via CRON_SECRET', endpoint: 'admin-trigger-generation', color: '#4f7df5' },
+  { key: 'resolution', label: 'Resolve Markets Now', icon: Play, description: 'Proxies to main app /api/resolve-expired-markets via CRON_SECRET', endpoint: 'admin-trigger-resolution', color: '#22c55e' },
+  { key: 'season', label: 'Run Season Transition', icon: RefreshCw, description: 'Proxies to main app /api/season-transition via CRON_SECRET', endpoint: 'admin-trigger-season', color: '#f59e0b' },
+  { key: 'reset-quests', label: 'Reset Expired Quests', icon: RotateCcw, description: 'Proxies to main app /api/reset-quests via CRON_SECRET', endpoint: 'admin-trigger-reset-quests', color: '#a855f7' },
 ];
 
 export default function System() {

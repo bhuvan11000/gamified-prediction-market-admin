@@ -2,7 +2,6 @@ import { verifyAuth } from './_shared/auth.js';
 import { corsHeaders } from './_shared/cors.js';
 
 const MAIN_APP_URL = process.env.MAIN_APP_URL || 'http://localhost:3000';
-const CRON_SECRET = process.env.CRON_SECRET;
 
 export default async (req) => {
   if (req.method === 'OPTIONS') {
@@ -16,25 +15,30 @@ export default async (req) => {
     });
   }
 
-  if (!CRON_SECRET) {
-    return new Response(JSON.stringify({ error: 'CRON_SECRET not configured' }), {
-      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  }
+  const authHeader = req.headers.get('authorization');
 
   try {
-    const response = await fetch(`${MAIN_APP_URL}/api/generate-markets`, {
+    const { market_id } = await req.json();
+
+    if (!market_id) {
+      return new Response(JSON.stringify({ error: 'market_id is required' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const response = await fetch(`${MAIN_APP_URL}/api/admin-delete-market`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-cron-secret': CRON_SECRET,
+        'Authorization': authHeader,
       },
+      body: JSON.stringify({ market_id }),
     });
 
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Main app request failed');
 
-    return new Response(JSON.stringify(data), {
+    return new Response(JSON.stringify({ success: true, market: data.market }), {
       status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err) {

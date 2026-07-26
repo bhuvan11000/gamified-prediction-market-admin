@@ -18,10 +18,3 @@
 
 [functions]
   node_bundler = "esbuild"
-
-  [functions.admin-trigger-generation]
-    timeout = 30
-  [functions.admin-trigger-resolution]
-    timeout = 30
-  [functions.admin-trigger-season]
-    timeout = 30
