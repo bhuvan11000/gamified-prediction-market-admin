@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "dev:netlify": "netlify dev",
-    "dev:all": "concurrently \"vite\" \"netlify functions:serve\"",
+    "dev:all": "concurrently \"vite\" \"netlify functions:serve --port 8889\"",
     "build": "vite build",
     "preview": "vite preview"
   },

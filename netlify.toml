@@ -13,7 +13,7 @@
 
 [dev]
   command = "npm run dev"
-  targetPort = 5173
+  targetPort = 5174
   port = 8081
 
 [functions]
