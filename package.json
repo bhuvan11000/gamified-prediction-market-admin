@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "dev:netlify": "netlify dev",
+    "dev:all": "concurrently \"vite\" \"netlify functions:serve\"",
     "build": "vite build",
     "preview": "vite preview"
   },
@@ -20,6 +21,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.0",
+    "concurrently": "^10.0.4",
     "vite": "^6.0.0"
   }
 }
