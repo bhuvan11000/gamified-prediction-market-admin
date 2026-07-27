@@ -35,6 +35,34 @@
   border-radius: var(--radius-sm);
 }
 
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.input {
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  transition: border-color var(--transition-fast);
+}
+
+.input:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px rgba(79, 125, 245, 0.15);
+  outline: none;
+}
+
+.error {
+  color: var(--color-no);
+  font-size: var(--text-sm);
+  text-align: left;
+}
+
 .signInBtn {
   display: inline-flex;
   align-items: center;

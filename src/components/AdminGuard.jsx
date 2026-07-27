@@ -1,10 +1,15 @@
+import { useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { supabase } from '@/lib/supabase';
-import { LogIn } from 'lucide-react';
+import Spinner from '@/components/ui/Spinner';
 import styles from './AdminGuard.module.css';
 
 export default function AdminGuard({ children }) {
   const { session, isAdmin } = useAppStore();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   if (!supabase) {
     return (
@@ -25,13 +30,36 @@ export default function AdminGuard({ children }) {
         <div className={styles.card}>
           <h1 className={styles.title}>Predict Arena Admin</h1>
           <p className={styles.text}>Sign in with your admin account to continue.</p>
-          <button
-            className={styles.signInBtn}
-            onClick={() => supabase.auth.signInWithOAuth({ provider: 'google' })}
-          >
-            <LogIn size={18} />
-            Sign in with Google
-          </button>
+          <form className={styles.form} onSubmit={async (e) => {
+            e.preventDefault();
+            setError('');
+            setLoading(true);
+            const { error } = await supabase.auth.signInWithPassword({ email, password });
+            if (error) setError(error.message);
+            setLoading(false);
+          }}>
+            <input
+              className={styles.input}
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+            <input
+              className={styles.input}
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+            {error && <p className={styles.error}>{error}</p>}
+            <button className={styles.signInBtn} type="submit" disabled={loading}>
+              {loading ? <Spinner size={14} /> : null}
+              Sign In
+            </button>
+          </form>
         </div>
       </div>
     );
