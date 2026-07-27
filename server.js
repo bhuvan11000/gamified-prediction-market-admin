@@ -289,15 +289,43 @@ app.post('/api/admin-force-quest', requireAdmin(async (req, res) => {
     return res.status(400).json({ error: 'Invalid request body' });
   }
 
-  let result;
-  if (action === 'complete') {
-    const { data, error } = await supabaseAdmin.rpc('complete_quest', { p_user_quest_id: user_quest_id });
-    if (error) throw error;
-    result = data;
-  } else if (action === 'increment') {
-    const { data, error } = await supabaseAdmin.rpc('update_quest_progress', { p_user_quest_id: user_quest_id, p_increment: 1 });
-    if (error) throw error;
-    result = data;
+  if (action === 'increment') {
+    const { data: current } = await supabaseAdmin
+      .from('user_quests')
+      .select('progress')
+      .eq('id', user_quest_id)
+      .single();
+
+    if (!current) return res.status(404).json({ error: 'User quest not found' });
+
+    await supabaseAdmin
+      .from('user_quests')
+      .update({ progress: (current.progress || 0) + 1 })
+      .eq('id', user_quest_id);
+  } else if (action === 'complete') {
+    const { data: uq } = await supabaseAdmin
+      .from('user_quests')
+      .select('user_id, quest_id')
+      .eq('id', user_quest_id)
+      .single();
+
+    if (!uq) return res.status(404).json({ error: 'User quest not found' });
+
+    const { data: questDef } = await supabaseAdmin
+      .from('quests')
+      .select('target, coin_reward, xp_reward')
+      .eq('id', uq.quest_id)
+      .single();
+
+    const target = questDef?.target || 1;
+
+    await supabaseAdmin.rpc('complete_quest', {
+      p_user_quest_id: user_quest_id,
+      p_user_id: uq.user_id,
+      p_coins: questDef?.coin_reward || 0,
+      p_xp: questDef?.xp_reward || 0,
+      p_new_progress: target,
+    });
   }
 
   const { data: quest, error: fetchError } = await supabaseAdmin
