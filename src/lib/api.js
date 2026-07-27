@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 
-const BASE = '/.netlify/functions';
+const BASE = '/api';
 
 export const api = {
   async post(endpoint, body) {

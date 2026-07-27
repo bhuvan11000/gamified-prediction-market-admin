@@ -5,14 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:netlify": "netlify dev",
-    "dev:all": "concurrently \"vite\" \"netlify functions:serve --port 8889\"",
+    "server": "node server.js",
+    "dev:all": "concurrently \"npm run dev\" \"npm run server\"",
     "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
     "@tanstack/react-query": "^5.60.0",
+    "express": "^5.2.1",
     "lucide-react": "^0.460.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
