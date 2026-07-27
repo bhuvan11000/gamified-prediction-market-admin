@@ -21,9 +21,10 @@ function cors(res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
 }
 
-app.options('*', (req, res) => {
+app.use((req, res, next) => {
   cors(res);
-  res.sendStatus(204);
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
 });
 
 async function verifyAuth(req) {
