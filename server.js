@@ -258,7 +258,7 @@ app.get('/api/admin-player-quests', requireAdmin(async (req, res) => {
       quest:quests!inner(title, description, type, action_type, target, xp_reward, coin_reward, criteria)
     `)
     .eq('user_id', user_id)
-    .order('created_at', { ascending: false });
+    .order('assigned_at', { ascending: false });
 
   if (error) throw error;
 
