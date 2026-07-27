@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAppStore } from '@/store/useAppStore';
 import AdminGuard from '@/components/AdminGuard';
 import Sidebar from '@/components/Sidebar';
+import ToastContainer from '@/components/ui/Toast';
 import Dashboard from '@/pages/Dashboard';
 import Markets from '@/pages/Markets';
 import Players from '@/pages/Players';
@@ -62,6 +63,7 @@ export default function App() {
             element={
               <AdminGuard>
                 <AppLayout />
+                <ToastContainer />
               </AdminGuard>
             }
           />

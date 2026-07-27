@@ -30,11 +30,12 @@ export default function Quests() {
   });
 
   async function loadQuests(userId) {
+    setSelectedId(userId);
+    setQuests([]);
     setLoadingQuest(true);
     try {
       const data = await api.get('/admin-player-quests', { user_id: userId });
       setQuests(data.quests || []);
-      setSelectedId(userId);
     } catch (err) {
       addToast(err.message, 'error');
     } finally {
