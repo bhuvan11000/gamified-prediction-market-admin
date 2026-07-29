@@ -57,7 +57,39 @@ export default function Markets() {
 
   const reviewQuery = useQuery({
     queryKey: ['markets-review'],
-    queryFn: () => supabase.from('markets').select('*').eq('status', 'review').order('created_at', { ascending: false }),
+    queryFn: async () => {
+      // Fetch markets in review
+      const { data: markets } = await supabase
+        .from('markets')
+        .select('*')
+        .eq('status', 'review')
+        .order('created_at', { ascending: false });
+
+      // Fetch disputes for all of them
+      if (markets && markets.length > 0) {
+        const marketIds = markets.map(m => m.id);
+        const { data: disputes } = await supabase
+          .from('market_disputes')
+          .select('*, user:user_id(username)')
+          .in('market_id', marketIds)
+          .order('created_at', { ascending: true });
+
+        // Attach disputes to their market
+        const disputeMap = {};
+        for (const d of disputes || []) {
+          if (!disputeMap[d.market_id]) disputeMap[d.market_id] = [];
+          disputeMap[d.market_id].push(d);
+        }
+
+        return markets.map(m => ({
+          ...m,
+          disputes: disputeMap[m.id] || [],
+          dispute_count: (disputeMap[m.id] || []).length,
+        }));
+      }
+
+      return markets || [];
+    },
     enabled: section === 'review',
   });
 
@@ -173,7 +205,7 @@ export default function Markets() {
             </div>
           ) : (
             <div className={styles.queue}>
-              {reviewQuery.data?.data?.map((market) => (
+              {reviewQuery.data?.map((market) => (
                 <div key={market.id} className={styles.marketCard}>
                   <div className={styles.marketHeader}>
                     <h3 className={styles.marketTitle}>{market.title}</h3>
@@ -183,8 +215,33 @@ export default function Markets() {
                   <div className={styles.marketMeta}>
                     <span><strong>Category:</strong> {market.category}</span>
                     <span><strong>Resolved At:</strong> {formatDateTime(market.resolved_at)}</span>
+                    {market.dispute_count > 0 && (
+                      <span className={styles.disputeCount}>
+                        <AlertTriangle size={12} /> {market.dispute_count} dispute{market.dispute_count !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                    {market.failed_resolutions > 0 && (
+                      <span className={styles.failCount}>
+                        Resolution failed {market.failed_resolutions}×
+                      </span>
+                    )}
                   </div>
                   <p className={styles.marketCriteria}><strong>Resolution Criteria:</strong> {market.resolution_criteria}</p>
+
+                  {/* Dispute list */}
+                  {market.disputes && market.disputes.length > 0 && (
+                    <div className={styles.disputeList}>
+                      <p className={styles.disputeListTitle}>Disputes:</p>
+                      {market.disputes.map((d) => (
+                        <div key={d.id} className={styles.disputeItem}>
+                          <span className={styles.disputeUser}>{d.user?.username || 'Unknown'}</span>
+                          <span className={styles.disputeReason}>{d.reason}</span>
+                          <span className={styles.disputeDate}>{formatDateTime(d.created_at)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   <div className={styles.marketActions}>
                     <Button variant="yes" size="sm" onClick={() => setConfirmModal({ type: 'resolve-yes', marketId: market.id, title: market.title })} disabled={acting}>
                       <CheckCircle size={14} /> Resolve YES
