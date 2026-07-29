@@ -201,14 +201,19 @@ export default function Markets() {
         <div>
           {reviewQuery.isLoading ? (
             <div className={styles.loadingWrap}><Spinner size={24} /></div>
-          ) : reviewQuery.data?.data?.length === 0 ? (
+          ) : reviewQuery.isError ? (
+            <div className={styles.emptyState}>
+              <AlertTriangle size={40} className={styles.emptyIcon} />
+              <p>Failed to load: {reviewQuery.error?.message}</p>
+            </div>
+          ) : !reviewQuery.data || reviewQuery.data.length === 0 ? (
             <div className={styles.emptyState}>
               <AlertTriangle size={40} className={styles.emptyIcon} />
               <p>No markets currently needing review.</p>
             </div>
           ) : (
             <div className={styles.queue}>
-              {reviewQuery.data?.map((market) => (
+              {reviewQuery.data.map((market) => (
                 <div key={market.id} className={styles.marketCard}>
                   <div className={styles.marketHeader}>
                     <h3 className={styles.marketTitle}>{market.title}</h3>
