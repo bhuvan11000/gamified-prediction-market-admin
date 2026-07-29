@@ -133,6 +133,21 @@ app.post('/api/admin-resolve-market', requireAdmin(async (req, res) => {
   if (!market_id || !['yes', 'no'].includes(resolution)) {
     return res.status(400).json({ error: 'Invalid request body' });
   }
+
+  const { data: market } = await supabaseAdmin
+    .from('markets')
+    .select('status')
+    .eq('id', market_id)
+    .single();
+
+  if (market?.status === 'review') {
+    const { error: updateErr } = await supabaseAdmin
+      .from('markets')
+      .update({ status: 'resolving' })
+      .eq('id', market_id);
+    if (updateErr) throw updateErr;
+  }
+
   const { data: result, error } = await supabaseAdmin.rpc('resolve_market', {
     p_market_id: market_id,
     p_resolution: resolution,
