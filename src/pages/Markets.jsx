@@ -57,7 +57,7 @@ export default function Markets() {
 
   const reviewQuery = useQuery({
     queryKey: ['markets-review'],
-    queryFn: () => api.get('/admin-markets-review'),
+    queryFn: () => api.post('/admin-markets-review', {}),
     enabled: section === 'review',
   });
 

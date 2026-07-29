@@ -262,7 +262,7 @@ app.post('/api/admin-ban-player', requireAdmin(async (req, res) => {
 }));
 
 // ── Admin: Review Markets ──
-app.get('/api/admin-markets-review', requireAdmin(async (req, res) => {
+app.post('/api/admin-markets-review', requireAdmin(async (req, res) => {
   const { data: markets } = await supabaseAdmin
     .from('markets')
     .select('*')
