@@ -58,23 +58,26 @@ export default function Markets() {
   const reviewQuery = useQuery({
     queryKey: ['markets-review'],
     queryFn: async () => {
-      // Fetch markets in review
       const { data: markets } = await supabase
         .from('markets')
         .select('*')
         .eq('status', 'review')
         .order('created_at', { ascending: false });
 
-      // Fetch disputes for all of them
       if (markets && markets.length > 0) {
         const marketIds = markets.map(m => m.id);
-        const { data: disputes } = await supabase
-          .from('market_disputes')
-          .select('*, user:user_id(username)')
-          .in('market_id', marketIds)
-          .order('created_at', { ascending: true });
+        let disputes = [];
+        try {
+          const res = await supabase
+            .from('market_disputes')
+            .select('*, user:user_id(username)')
+            .in('market_id', marketIds)
+            .order('created_at', { ascending: true });
+          disputes = res.data || [];
+        } catch {
+          // disputes table may not exist; proceed without it
+        }
 
-        // Attach disputes to their market
         const disputeMap = {};
         for (const d of disputes || []) {
           if (!disputeMap[d.market_id]) disputeMap[d.market_id] = [];
