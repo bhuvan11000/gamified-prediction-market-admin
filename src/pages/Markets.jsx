@@ -57,42 +57,7 @@ export default function Markets() {
 
   const reviewQuery = useQuery({
     queryKey: ['markets-review'],
-    queryFn: async () => {
-      const { data: markets } = await supabase
-        .from('markets')
-        .select('*')
-        .eq('status', 'review')
-        .order('created_at', { ascending: false });
-
-      if (markets && markets.length > 0) {
-        const marketIds = markets.map(m => m.id);
-        let disputes = [];
-        try {
-          const res = await supabase
-            .from('market_disputes')
-            .select('*, user:user_id(username)')
-            .in('market_id', marketIds)
-            .order('created_at', { ascending: true });
-          disputes = res.data || [];
-        } catch {
-          // disputes table may not exist; proceed without it
-        }
-
-        const disputeMap = {};
-        for (const d of disputes || []) {
-          if (!disputeMap[d.market_id]) disputeMap[d.market_id] = [];
-          disputeMap[d.market_id].push(d);
-        }
-
-        return markets.map(m => ({
-          ...m,
-          disputes: disputeMap[m.id] || [],
-          dispute_count: (disputeMap[m.id] || []).length,
-        }));
-      }
-
-      return markets || [];
-    },
+    queryFn: () => api.get('/admin-markets-review'),
     enabled: section === 'review',
   });
 

@@ -261,6 +261,42 @@ app.post('/api/admin-ban-player', requireAdmin(async (req, res) => {
   res.json({ user_id, is_banned: user.is_banned, reason: user.ban_reason });
 }));
 
+// ── Admin: Review Markets ──
+app.get('/api/admin-markets-review', requireAdmin(async (req, res) => {
+  const { data: markets } = await supabaseAdmin
+    .from('markets')
+    .select('*')
+    .eq('status', 'review')
+    .order('created_at', { ascending: false });
+
+  if (markets && markets.length > 0) {
+    const marketIds = markets.map(m => m.id);
+    let disputes = [];
+    try {
+      const { data: d } = await supabaseAdmin
+        .from('market_disputes')
+        .select('*, user:user_id(username)')
+        .in('market_id', marketIds)
+        .order('created_at', { ascending: true });
+      disputes = d || [];
+    } catch {}
+
+    const disputeMap = {};
+    for (const d of disputes) {
+      if (!disputeMap[d.market_id]) disputeMap[d.market_id] = [];
+      disputeMap[d.market_id].push(d);
+    }
+
+    return res.json(markets.map(m => ({
+      ...m,
+      disputes: disputeMap[m.id] || [],
+      dispute_count: (disputeMap[m.id] || []).length,
+    })));
+  }
+
+  res.json(markets || []);
+}));
+
 // ── Admin: Player Quests ──
 app.get('/api/admin-player-quests', requireAdmin(async (req, res) => {
   const user_id = req.query.user_id;
