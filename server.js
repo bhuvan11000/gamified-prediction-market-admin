@@ -27,14 +27,17 @@ app.use((req, res, next) => {
   next();
 });
 
-async function verifyAuth(req) {
+function verifyAuth(req) {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) return null;
   const token = authHeader.split(' ')[1];
   if (!token) return null;
-  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
-  if (error || !user) return null;
-  return user;
+  try {
+    const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
+    return payload;
+  } catch {
+    return null;
+  }
 }
 
 function requireAdmin(handler) {
@@ -99,7 +102,7 @@ app.post('/api/admin-create-market', requireAdmin(async (req, res, auth) => {
       q_yes: 0, q_no: 0, b: 100,
       opens_at: new Date().toISOString(),
       closes_at: new Date(closes_at).toISOString(),
-      approved_by: auth.id,
+      approved_by: auth.sub,
       approved_at: new Date().toISOString(),
     })
     .select()
