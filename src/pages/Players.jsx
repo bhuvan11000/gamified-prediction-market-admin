@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/Badge';
 import Spinner from '@/components/ui/Spinner';
 import Modal from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
-import { Search, ChevronDown, ChevronUp, Ban, CheckCircle, Save, X } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp, Ban, CheckCircle, Save, X, RotateCcw } from 'lucide-react';
 import styles from './Players.module.css';
 
 const RANK_OPTIONS = ['Unranked', 'Analyst', 'Strategist', 'Forecaster', 'Visionary', 'Prophet', 'Omniscient'];
@@ -83,6 +83,20 @@ export default function Players() {
       addToast(err.message, 'error');
     } finally {
       setSaving(s => ({ ...s, [fieldKey]: false }));
+    }
+  }
+
+  async function handleResetDailyReward(userId) {
+    setActing(true);
+    try {
+      await api.post('/admin-reset-daily-reward', { user_id: userId });
+      addToast('Daily reward reset', 'success');
+      searchQuery.refetch();
+      queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] });
+    } catch (err) {
+      addToast(err.message, 'error');
+    } finally {
+      setActing(false);
     }
   }
 
@@ -269,6 +283,9 @@ export default function Players() {
                   <Ban size={14} /> Ban Player
                 </Button>
               )}
+              <Button variant="ghost" size="sm" onClick={() => handleResetDailyReward(selectedPlayer.id)} disabled={acting}>
+                <RotateCcw size={14} /> Reset Daily Reward
+              </Button>
             </div>
           </div>
         )}

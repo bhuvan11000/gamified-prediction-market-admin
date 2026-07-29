@@ -264,6 +264,20 @@ app.post('/api/admin-ban-player', requireAdmin(async (req, res) => {
   res.json({ user_id, is_banned: user.is_banned, reason: user.ban_reason });
 }));
 
+// ── Admin: Reset Daily Reward ──
+app.post('/api/admin-reset-daily-reward', requireAdmin(async (req, res) => {
+  const { user_id } = req.body;
+  if (!user_id) return res.status(400).json({ error: 'user_id is required' });
+
+  const { error } = await supabaseAdmin
+    .from('users')
+    .update({ last_reward_claim: null, last_bet_date: new Date().toISOString().split('T')[0] })
+    .eq('id', user_id);
+
+  if (error) throw error;
+  res.json({ success: true });
+}));
+
 // ── Admin: Review Markets ──
 app.post('/api/admin-markets-review', requireAdmin(async (req, res) => {
   const { data: markets } = await supabaseAdmin
