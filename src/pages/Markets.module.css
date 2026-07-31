@@ -256,3 +256,13 @@
   font-size: 10px;
   color: var(--text-muted);
 }
+
+.upvoteText {
+  color: var(--color-yes);
+  font-weight: 600;
+}
+
+.downvoteText {
+  color: var(--color-no);
+  font-weight: 600;
+}

@@ -184,9 +184,20 @@ async function proxyToMain(endpoint, req, res) {
 }
 
 app.post('/api/admin-trigger-generation', requireAdmin((req, res) => proxyToMain('generate-markets', req, res)));
-app.post('/api/admin-trigger-resolution', requireAdmin((req, res) => proxyToMain('resolve-expired-markets', req, res)));
 app.post('/api/admin-trigger-season', requireAdmin((req, res) => proxyToMain('season-transition', req, res)));
 app.post('/api/admin-trigger-reset-quests', requireAdmin((req, res) => proxyToMain('reset-quests', req, res)));
+
+// ── Admin: All Markets (manual resolution) ──
+app.post('/api/admin-all-markets', requireAdmin(async (req, res) => {
+  const { data: markets, error } = await supabaseAdmin
+    .from('markets')
+    .select('*')
+    .neq('status', 'draft')
+    .order('created_at', { ascending: false })
+    .limit(100);
+  if (error) throw error;
+  res.json(markets || []);
+}));
 
 // ── Admin: Update Player ──
 const VALID_RANKS = ['Unranked', 'Analyst', 'Strategist', 'Forecaster', 'Visionary', 'Prophet', 'Omniscient'];
@@ -404,6 +415,183 @@ app.post('/api/admin-force-quest', requireAdmin(async (req, res) => {
 
   if (fetchError) throw fetchError;
   res.json({ quest });
+}));
+
+// ── Community Proposal helpers ──
+const COMMUNITY_REWARDS_BY_RANK = {
+  'Unranked':   { proposalCost: 50,   approvalReward: 75,   approvalXp: 100 },
+  'Analyst':    { proposalCost: 100,  approvalReward: 150,  approvalXp: 100 },
+  'Strategist': { proposalCost: 200,  approvalReward: 300,  approvalXp: 100 },
+  'Forecaster': { proposalCost: 500,  approvalReward: 750,  approvalXp: 100 },
+  'Visionary':  { proposalCost: 1000, approvalReward: 1500, approvalXp: 100 },
+  'Prophet':    { proposalCost: 2500, approvalReward: 3750, approvalXp: 100 },
+  'Omniscient': { proposalCost: 5000, approvalReward: 7500, approvalXp: 100 },
+};
+
+function getApprovalReward(rank) {
+  const r = COMMUNITY_REWARDS_BY_RANK[rank] || COMMUNITY_REWARDS_BY_RANK['Unranked'];
+  return { coins: r.approvalReward, xp: r.approvalXp };
+}
+
+const RANK_THRESHOLDS = [
+  { name: 'Unranked', minCoins: 0 },
+  { name: 'Analyst', minCoins: 2500 },
+  { name: 'Strategist', minCoins: 5000 },
+  { name: 'Forecaster', minCoins: 10000 },
+  { name: 'Visionary', minCoins: 25000 },
+  { name: 'Prophet', minCoins: 75000 },
+  { name: 'Omniscient', minCoins: 250000 },
+];
+
+const RANK_ORDER = {
+  'Unranked': 0, 'Analyst': 1, 'Strategist': 2, 'Forecaster': 3,
+  'Visionary': 4, 'Prophet': 5, 'Omniscient': 6,
+};
+
+function getRank(coins) {
+  for (let i = RANK_THRESHOLDS.length - 1; i >= 0; i--) {
+    if (coins >= RANK_THRESHOLDS[i].minCoins) return RANK_THRESHOLDS[i].name;
+  }
+  return 'Unranked';
+}
+
+// ── Admin: List Pending Proposals ──
+app.post('/api/admin-pending-proposals', requireAdmin(async (req, res) => {
+  const { data: proposals } = await supabaseAdmin
+    .from('community_proposals')
+    .select('*')
+    .eq('status', 'pending')
+    .order('proposed_at', { ascending: false });
+
+  if (!proposals || proposals.length === 0) return res.json([]);
+
+  const proposerIds = [...new Set(proposals.map(p => p.proposer_id))];
+  const { data: proposers } = await supabaseAdmin
+    .from('users')
+    .select('id, username, rank, level')
+    .in('id', proposerIds);
+
+  const proposerMap = {};
+  if (proposers) {
+    for (const u of proposers) proposerMap[u.id] = u;
+  }
+
+  const result = proposals.map(p => ({
+    ...p,
+    proposer: proposerMap[p.proposer_id] || null,
+  }));
+
+  res.json(result);
+}));
+
+// ── Admin: Approve Proposal ──
+app.post('/api/admin-approve-proposal', requireAdmin(async (req, res) => {
+  const { proposal_id } = req.body;
+  if (!proposal_id) return res.status(400).json({ error: 'proposal_id is required' });
+
+  const { data: proposal, error: fetchErr } = await supabaseAdmin
+    .from('community_proposals')
+    .select('*')
+    .eq('id', proposal_id)
+    .single();
+
+  if (fetchErr || !proposal) return res.status(404).json({ error: 'Proposal not found' });
+  if (proposal.status !== 'pending') return res.status(400).json({ error: 'Proposal is no longer pending' });
+
+  // Re-count actual votes
+  const { count: upvotes } = await supabaseAdmin
+    .from('proposal_votes')
+    .select('*', { count: 'exact', head: true })
+    .eq('proposal_id', proposal_id)
+    .eq('vote', 'up');
+
+  const { count: downvotes } = await supabaseAdmin
+    .from('proposal_votes')
+    .select('*', { count: 'exact', head: true })
+    .eq('proposal_id', proposal_id)
+    .eq('vote', 'down');
+
+  const up = upvotes || 0;
+  const down = downvotes || 0;
+
+  // Fetch proposer
+  const { data: proposer } = await supabaseAdmin
+    .from('users')
+    .select('coins, xp, level, rank')
+    .eq('id', proposal.proposer_id)
+    .single();
+
+  const reward = proposer ? getApprovalReward(proposer.rank) : { coins: 75, xp: 100 };
+
+  if (proposer) {
+    const newCoins = proposer.coins + proposal.stake_amount + reward.coins;
+    const newXp = proposer.xp + reward.xp;
+
+    await supabaseAdmin
+      .from('users')
+      .update({ coins: newCoins, xp: newXp })
+      .eq('id', proposal.proposer_id);
+
+    // Check rank change
+    const newRank = getRank(newCoins);
+    if (newRank !== proposer.rank) {
+      await supabaseAdmin
+        .from('users')
+        .update({ rank: newRank })
+        .eq('id', proposal.proposer_id);
+    }
+
+    // Create market
+    const { data: market, error: marketError } = await supabaseAdmin
+      .from('markets')
+      .insert({
+        title: proposal.title,
+        description: proposal.description,
+        category: proposal.category,
+        resolution_criteria: proposal.resolution_criteria,
+        source: 'community',
+        status: 'open',
+        creator_id: proposal.proposer_id,
+        closes_at: proposal.closes_at,
+        opens_at: new Date().toISOString(),
+        q_yes: 0, q_no: 0, b: 100,
+        yes_price: 0.50, no_price: 0.50,
+      })
+      .select()
+      .single();
+
+    if (marketError) console.error('Market creation failed:', marketError.message);
+  }
+
+  // Update proposal
+  await supabaseAdmin
+    .from('community_proposals')
+    .update({ upvotes: up, downvotes: down, status: 'approved' })
+    .eq('id', proposal_id);
+
+  res.json({ success: true, proposal_id, status: 'approved' });
+}));
+
+// ── Admin: Reject Proposal ──
+app.post('/api/admin-reject-proposal', requireAdmin(async (req, res) => {
+  const { proposal_id } = req.body;
+  if (!proposal_id) return res.status(400).json({ error: 'proposal_id is required' });
+
+  const { data: proposal, error: fetchErr } = await supabaseAdmin
+    .from('community_proposals')
+    .select('id, status')
+    .eq('id', proposal_id)
+    .single();
+
+  if (fetchErr || !proposal) return res.status(404).json({ error: 'Proposal not found' });
+  if (proposal.status !== 'pending') return res.status(400).json({ error: 'Proposal is no longer pending' });
+
+  await supabaseAdmin
+    .from('community_proposals')
+    .update({ status: 'rejected' })
+    .eq('id', proposal_id);
+
+  res.json({ success: true, proposal_id, status: 'rejected' });
 }));
 
 const PORT = process.env.PORT || 3001;

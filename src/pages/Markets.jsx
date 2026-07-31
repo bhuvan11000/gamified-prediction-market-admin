@@ -15,8 +15,10 @@ import {
 import styles from './Markets.module.css';
 
 const SECTIONS = [
+  { key: 'all', label: 'All Markets' },
   { key: 'drafts', label: 'Draft Queue' },
   { key: 'review', label: 'Dispute Resolution' },
+  { key: 'proposals', label: 'Pending Proposals' },
   { key: 'create', label: 'Manual Creation' },
 ];
 
@@ -55,11 +57,32 @@ export default function Markets() {
     enabled: section === 'drafts',
   });
 
+  const proposalsQuery = useQuery({
+    queryKey: ['pending-proposals'],
+    queryFn: () => api.post('/admin-pending-proposals', {}),
+    enabled: section === 'proposals',
+  });
+
   const reviewQuery = useQuery({
     queryKey: ['markets-review'],
     queryFn: () => api.post('/admin-markets-review', {}),
     enabled: section === 'review',
   });
+
+  const allMarketsQuery = useQuery({
+    queryKey: ['markets-all'],
+    queryFn: () => api.post('/admin-all-markets', {}),
+    enabled: section === 'all',
+  });
+
+  const CAN_RESOLVE = ['open', 'closed', 'review', 'resolving'];
+
+  async function refetchAfterAction() {
+    allMarketsQuery.refetch();
+    reviewQuery.refetch();
+    draftQuery.refetch();
+    queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] });
+  }
 
   async function handleDelete(marketId) {
     setActing(true);
@@ -82,8 +105,7 @@ export default function Markets() {
       await api.post('/admin-resolve-market', { market_id: marketId, resolution });
       addToast(`Market resolved as ${resolution}`, 'success');
       setConfirmModal(null);
-      reviewQuery.refetch();
-      queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] });
+      refetchAfterAction();
     } catch (err) {
       addToast(err.message, 'error');
     } finally {
@@ -97,8 +119,36 @@ export default function Markets() {
       await api.post('/admin-cancel-market', { market_id: marketId });
       addToast('Market cancelled and refunded', 'success');
       setConfirmModal(null);
-      reviewQuery.refetch();
+      refetchAfterAction();
+    } catch (err) {
+      addToast(err.message, 'error');
+    } finally {
+      setActing(false);
+    }
+  }
+
+  async function handleApproveProposal(proposalId) {
+    setActing(true);
+    try {
+      await api.post('/admin-approve-proposal', { proposal_id: proposalId });
+      addToast('Proposal approved — market created', 'success');
+      setConfirmModal(null);
+      proposalsQuery.refetch();
       queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] });
+    } catch (err) {
+      addToast(err.message, 'error');
+    } finally {
+      setActing(false);
+    }
+  }
+
+  async function handleRejectProposal(proposalId) {
+    setActing(true);
+    try {
+      await api.post('/admin-reject-proposal', { proposal_id: proposalId });
+      addToast('Proposal rejected', 'success');
+      setConfirmModal(null);
+      proposalsQuery.refetch();
     } catch (err) {
       addToast(err.message, 'error');
     } finally {
@@ -121,6 +171,71 @@ export default function Markets() {
           </button>
         ))}
       </div>
+
+      {/* ── ALL MARKETS (manual resolution) ── */}
+      {section === 'all' && (
+        <div>
+          {allMarketsQuery.isLoading ? (
+            <div className={styles.loadingWrap}><Spinner size={24} /></div>
+          ) : allMarketsQuery.isError ? (
+            <div className={styles.emptyState}>
+              <AlertTriangle size={40} className={styles.emptyIcon} />
+              <p>Failed to load: {allMarketsQuery.error?.message}</p>
+            </div>
+          ) : !allMarketsQuery.data || allMarketsQuery.data.length === 0 ? (
+            <div className={styles.emptyState}>
+              <Clock size={40} className={styles.emptyIcon} />
+              <p>No markets found.</p>
+            </div>
+          ) : (
+            <div className={styles.queue}>
+              {allMarketsQuery.data.map((market) => {
+                const actionable = CAN_RESOLVE.includes(market.status);
+                return (
+                  <div key={market.id} className={styles.marketCard}>
+                    <div className={styles.marketHeader}>
+                      <h3 className={styles.marketTitle}>{market.title}</h3>
+                      <Badge variant={STATUS_BADGE[market.status]?.variant}>{STATUS_BADGE[market.status]?.label}</Badge>
+                    </div>
+                    <p className={styles.marketDesc}>{market.description}</p>
+                    <div className={styles.marketMeta}>
+                      <span><strong>Source:</strong> {SOURCE_LABELS[market.source] || market.source}</span>
+                      <span><strong>Category:</strong> {market.category}</span>
+                      <span><strong>Volume:</strong> {market.volume?.toLocaleString()} coins</span>
+                      <span><strong>Participants:</strong> {market.participant_count}</span>
+                      {market.status === 'open' && (
+                        <span><strong>Closes:</strong> {formatDateTime(market.closes_at)}</span>
+                      )}
+                      {market.status === 'resolved' && (
+                        <span><strong>Resolution:</strong> {market.resolution?.toUpperCase()}</span>
+                      )}
+                    </div>
+                    <p className={styles.marketCriteria}><strong>Resolution Criteria:</strong> {market.resolution_criteria}</p>
+                    {market.dispute_deadline && new Date(market.dispute_deadline) > new Date() && (
+                      <p className={styles.marketCriteria}>
+                        <strong>Disputes open until:</strong> {formatDateTime(market.dispute_deadline)}
+                      </p>
+                    )}
+                    {actionable && (
+                      <div className={styles.marketActions}>
+                        <Button variant="yes" size="sm" onClick={() => setConfirmModal({ type: 'resolve-yes', marketId: market.id, title: market.title })} disabled={acting}>
+                          <CheckCircle size={14} /> Resolve YES
+                        </Button>
+                        <Button variant="no" size="sm" onClick={() => setConfirmModal({ type: 'resolve-no', marketId: market.id, title: market.title })} disabled={acting}>
+                          <XCircle size={14} /> Resolve NO
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => setConfirmModal({ type: 'cancel', marketId: market.id, title: market.title })} disabled={acting}>
+                          Cancel & Refund
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── DRAFT QUEUE ── */}
       {section === 'drafts' && (
@@ -233,6 +348,61 @@ export default function Markets() {
         </div>
       )}
 
+      {/* ── PENDING PROPOSALS ── */}
+      {section === 'proposals' && (
+        <div>
+          {proposalsQuery.isLoading ? (
+            <div className={styles.loadingWrap}><Spinner size={24} /></div>
+          ) : proposalsQuery.isError ? (
+            <div className={styles.emptyState}>
+              <AlertTriangle size={40} className={styles.emptyIcon} />
+              <p>Failed to load: {proposalsQuery.error?.message}</p>
+            </div>
+          ) : !proposalsQuery.data || proposalsQuery.data.length === 0 ? (
+            <div className={styles.emptyState}>
+              <Clock size={40} className={styles.emptyIcon} />
+              <p>No pending community proposals.</p>
+            </div>
+          ) : (
+            <div className={styles.queue}>
+              {proposalsQuery.data.map((proposal) => (
+                <div key={proposal.id} className={styles.marketCard}>
+                  <div className={styles.marketHeader}>
+                    <h3 className={styles.marketTitle}>{proposal.title}</h3>
+                    <Badge variant="warning">Pending</Badge>
+                  </div>
+                  <p className={styles.marketDesc}>{proposal.description}</p>
+                  <div className={styles.marketMeta}>
+                    <span><strong>Category:</strong> {proposal.category}</span>
+                    <span><strong>By:</strong> {proposal.proposer?.username || 'Unknown'} ({proposal.proposer?.rank || '?'}, Lv.{proposal.proposer?.level || '?'})</span>
+                    <span><strong>Proposed:</strong> {formatDateTime(proposal.proposed_at)}</span>
+                    <span><strong>Voting ends:</strong> {formatTimeRemaining(proposal.voting_deadline)}</span>
+                  </div>
+                  <div className={styles.marketMeta}>
+                    <span><strong>Votes:</strong> <span className={styles.upvoteText}>▲ {proposal.upvotes}</span> / <span className={styles.downvoteText}>▼ {proposal.downvotes}</span></span>
+                    <span><strong>Stake:</strong> {proposal.stake_amount} coins</span>
+                  </div>
+                  <p className={styles.marketCriteria}>
+                    <strong>Closes:</strong> {formatTimeRemaining(proposal.closes_at)}
+                  </p>
+                  <p className={styles.marketCriteria}>
+                    <strong>Resolution Criteria:</strong> {proposal.resolution_criteria}
+                  </p>
+                  <div className={styles.marketActions}>
+                    <Button variant="yes" size="sm" onClick={() => setConfirmModal({ type: 'approve-proposal', proposalId: proposal.id, title: proposal.title })} disabled={acting}>
+                      <CheckCircle size={14} /> Approve
+                    </Button>
+                    <Button variant="no" size="sm" onClick={() => setConfirmModal({ type: 'reject-proposal', proposalId: proposal.id, title: proposal.title })} disabled={acting}>
+                      <XCircle size={14} /> Reject
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── MANUAL CREATION ── */}
       {section === 'create' && <CreateMarketForm onCreated={() => { addToast('Market created', 'success'); queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] }); }} />}
 
@@ -243,6 +413,8 @@ export default function Markets() {
           {confirmModal?.type === 'resolve-yes' && `Resolve "${confirmModal?.title}" as YES? This will pay out YES position holders.`}
           {confirmModal?.type === 'resolve-no' && `Resolve "${confirmModal?.title}" as NO? This will pay out NO position holders.`}
           {confirmModal?.type === 'cancel' && `Cancel "${confirmModal?.title}" and refund all participants?`}
+          {confirmModal?.type === 'approve-proposal' && `Approve "${confirmModal?.title}"? Stake (${proposalsQuery.data?.find(p => p.id === confirmModal?.proposalId)?.stake_amount || '?'} coins) will be refunded + reward given, and a market will be created.`}
+          {confirmModal?.type === 'reject-proposal' && `Reject "${confirmModal?.title}"? The stake (${proposalsQuery.data?.find(p => p.id === confirmModal?.proposalId)?.stake_amount || '?'} coins) will be forfeited.`}
         </p>
         <div className={styles.confirmActions}>
           <Button variant="ghost" onClick={() => setConfirmModal(null)}>Go Back</Button>
@@ -264,6 +436,16 @@ export default function Markets() {
           {confirmModal?.type === 'cancel' && (
             <Button variant="danger" onClick={() => handleCancel(confirmModal.marketId)} disabled={acting}>
               {acting ? <Spinner size={14} /> : null} Cancel & Refund
+            </Button>
+          )}
+          {confirmModal?.type === 'approve-proposal' && (
+            <Button variant="yes" onClick={() => handleApproveProposal(confirmModal.proposalId)} disabled={acting}>
+              {acting ? <Spinner size={14} /> : null} Approve & Create Market
+            </Button>
+          )}
+          {confirmModal?.type === 'reject-proposal' && (
+            <Button variant="no" onClick={() => handleRejectProposal(confirmModal.proposalId)} disabled={acting}>
+              {acting ? <Spinner size={14} /> : null} Reject Proposal
             </Button>
           )}
         </div>
