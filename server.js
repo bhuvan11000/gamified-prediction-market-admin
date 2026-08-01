@@ -57,18 +57,13 @@ function requireAdmin(handler) {
 
 // ── Admin: Create Market ──
 app.post('/api/admin-create-market', requireAdmin(async (req, res, auth) => {
-  const { title, description, category, resolution_criteria, closes_at } = req.body;
+  const { title, category, resolution_criteria, closes_at } = req.body;
   const errors = [];
   if (!title || typeof title !== 'string') errors.push('Title is required');
   else {
     if (title.length < 10) errors.push('Title must be at least 10 characters');
     if (title.length > 200) errors.push('Title must not exceed 200 characters');
     if (!title.trim().endsWith('?')) errors.push('Title must end with a question mark');
-  }
-  if (!description || typeof description !== 'string') errors.push('Description is required');
-  else {
-    if (description.length < 20) errors.push('Description must be at least 20 characters');
-    if (description.length > 500) errors.push('Description must not exceed 500 characters');
   }
   if (!category || !VALID_CATEGORIES.includes(category)) {
     errors.push(`Category must be one of: ${VALID_CATEGORIES.join(', ')}`);
@@ -93,7 +88,6 @@ app.post('/api/admin-create-market', requireAdmin(async (req, res, auth) => {
     .from('markets')
     .insert({
       title: title.trim(),
-      description: description.trim(),
       category,
       resolution_criteria: resolution_criteria.trim(),
       source: 'admin',
@@ -546,7 +540,6 @@ app.post('/api/admin-approve-proposal', requireAdmin(async (req, res) => {
       .from('markets')
       .insert({
         title: proposal.title,
-        description: proposal.description,
         category: proposal.category,
         resolution_criteria: proposal.resolution_criteria,
         source: 'community',

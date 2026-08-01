@@ -197,8 +197,7 @@ export default function Markets() {
                       <h3 className={styles.marketTitle}>{market.title}</h3>
                       <Badge variant={STATUS_BADGE[market.status]?.variant}>{STATUS_BADGE[market.status]?.label}</Badge>
                     </div>
-                    <p className={styles.marketDesc}>{market.description}</p>
-                    <div className={styles.marketMeta}>
+                      <div className={styles.marketMeta}>
                       <span><strong>Source:</strong> {SOURCE_LABELS[market.source] || market.source}</span>
                       <span><strong>Category:</strong> {market.category}</span>
                       <span><strong>Volume:</strong> {market.volume?.toLocaleString()} coins</span>
@@ -255,7 +254,6 @@ export default function Markets() {
                     <h3 className={styles.marketTitle}>{market.title}</h3>
                     <Badge variant={STATUS_BADGE[market.status]?.variant}>{STATUS_BADGE[market.status]?.label}</Badge>
                   </div>
-                  <p className={styles.marketDesc}>{market.description}</p>
                   <div className={styles.marketMeta}>
                     <span><strong>Source:</strong> {SOURCE_LABELS[market.source] || market.source}</span>
                     <span><strong>Category:</strong> {market.category}</span>
@@ -299,7 +297,6 @@ export default function Markets() {
                     <h3 className={styles.marketTitle}>{market.title}</h3>
                     <Badge variant="warning">Needs Review</Badge>
                   </div>
-                  <p className={styles.marketDesc}>{market.description}</p>
                   <div className={styles.marketMeta}>
                     <span><strong>Category:</strong> {market.category}</span>
                     <span><strong>Resolved At:</strong> {formatDateTime(market.resolved_at)}</span>
@@ -371,7 +368,6 @@ export default function Markets() {
                     <h3 className={styles.marketTitle}>{proposal.title}</h3>
                     <Badge variant="warning">Pending</Badge>
                   </div>
-                  <p className={styles.marketDesc}>{proposal.description}</p>
                   <div className={styles.marketMeta}>
                     <span><strong>Category:</strong> {proposal.category}</span>
                     <span><strong>By:</strong> {proposal.proposer?.username || 'Unknown'} ({proposal.proposer?.rank || '?'}, Lv.{proposal.proposer?.level || '?'})</span>
@@ -456,7 +452,7 @@ export default function Markets() {
 
 function CreateMarketForm({ onCreated }) {
   const [form, setForm] = useState({
-    title: '', description: '', category: 'tech', resolution_criteria: '', closes_at: '',
+    title: '', category: 'tech', resolution_criteria: '', closes_at: '',
   });
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
@@ -466,7 +462,6 @@ function CreateMarketForm({ onCreated }) {
     const e = {};
     if (form.title.length < 10 || form.title.length > 200) e.title = 'Title must be 10-200 characters';
     if (!form.title.trim().endsWith('?')) e.title = 'Title must end with ?';
-    if (form.description.length < 20 || form.description.length > 500) e.description = 'Description must be 20-500 characters';
     if (form.resolution_criteria.length < 20 || form.resolution_criteria.length > 300) e.resolution_criteria = 'Resolution criteria must be 20-300 characters';
     if (!form.closes_at) e.closes_at = 'Close date is required';
     else {
@@ -487,7 +482,7 @@ function CreateMarketForm({ onCreated }) {
     try {
       await api.post('/admin-create-market', form);
       addToast('Market created successfully', 'success');
-      setForm({ title: '', description: '', category: 'tech', resolution_criteria: '', closes_at: '' });
+      setForm({ title: '', category: 'tech', resolution_criteria: '', closes_at: '' });
       onCreated?.();
     } catch (err) {
       addToast(err.message, 'error');
@@ -502,11 +497,6 @@ function CreateMarketForm({ onCreated }) {
         <span className={styles.fieldLabel}>Title (10-200 chars, must end with ?)</span>
         <input className={`${styles.input} ${errors.title ? styles.inputError : ''}`} value={form.title} onChange={(e) => setForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Will Bitcoin reach $100k by end of 2026?" />
         {errors.title && <span className={styles.fieldError}>{errors.title}</span>}
-      </label>
-      <label className={styles.field}>
-        <span className={styles.fieldLabel}>Description (20-500 chars)</span>
-        <textarea className={`${styles.input} ${styles.textarea} ${errors.description ? styles.inputError : ''}`} value={form.description} onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Provide context for this prediction market..." />
-        {errors.description && <span className={styles.fieldError}>{errors.description}</span>}
       </label>
       <div className={styles.fieldRow}>
         <label className={styles.field}>
