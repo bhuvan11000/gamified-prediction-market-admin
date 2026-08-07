@@ -183,6 +183,7 @@ app.post('/api/admin-trigger-reset-quests', requireAdmin((req, res) => proxyToMa
 
 // ── Admin: All Markets (manual resolution) ──
 app.post('/api/admin-all-markets', requireAdmin(async (req, res) => {
+  const { include_history } = req.body || {};
   const { data: markets, error } = await supabaseAdmin
     .from('markets')
     .select('*')
@@ -190,6 +191,22 @@ app.post('/api/admin-all-markets', requireAdmin(async (req, res) => {
     .order('created_at', { ascending: false })
     .limit(100);
   if (error) throw error;
+
+  // Default view: actionable markets + resolved/cancelled within the last 7 days.
+  // Old resolved/cancelled markets only appear with include_history: true.
+  const HISTORY_WINDOW_DAYS = 7;
+  const ACTIONABLE_STATUSES = ['open', 'closed', 'review', 'resolving'];
+
+  if (!include_history) {
+    const cutoff = Date.now() - HISTORY_WINDOW_DAYS * 86400000;
+    const visible = (markets || []).filter((m) => {
+      if (ACTIONABLE_STATUSES.includes(m.status)) return true;
+      // resolved and cancelled both set resolved_at; fall back to created_at
+      return new Date(m.resolved_at || m.created_at).getTime() >= cutoff;
+    });
+    return res.json(visible);
+  }
+
   res.json(markets || []);
 }));
 

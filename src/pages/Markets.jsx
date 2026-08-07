@@ -50,6 +50,7 @@ export default function Markets() {
 
   const [confirmModal, setConfirmModal] = useState(null);
   const [acting, setActing] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   const draftQuery = useQuery({
     queryKey: ['markets-drafts'],
@@ -70,8 +71,8 @@ export default function Markets() {
   });
 
   const allMarketsQuery = useQuery({
-    queryKey: ['markets-all'],
-    queryFn: () => api.post('/admin-all-markets', {}),
+    queryKey: ['markets-all', showHistory],
+    queryFn: () => api.post('/admin-all-markets', { include_history: showHistory }),
     enabled: section === 'all',
   });
 
@@ -175,6 +176,14 @@ export default function Markets() {
       {/* ── ALL MARKETS (manual resolution) ── */}
       {section === 'all' && (
         <div>
+          <div className={styles.sectionToolbar}>
+            <span className={styles.sectionCount}>
+              {allMarketsQuery.data?.length ?? 0} market{allMarketsQuery.data?.length === 1 ? '' : 's'}
+            </span>
+            <Button variant="ghost" size="sm" onClick={() => setShowHistory((v) => !v)}>
+              {showHistory ? 'Hide old history' : 'Show full history'}
+            </Button>
+          </div>
           {allMarketsQuery.isLoading ? (
             <div className={styles.loadingWrap}><Spinner size={24} /></div>
           ) : allMarketsQuery.isError ? (
