@@ -28,7 +28,7 @@ export default function Sidebar() {
       <div className={styles.brand}>
         <Swords size={22} className={styles.brandIcon} />
         <div>
-          <h1 className={styles.brandName}>Predict Arena</h1>
+          <h1 className={styles.brandName}>bet.</h1>
           <p className={styles.brandSub}>Admin Panel</p>
         </div>
       </div>
