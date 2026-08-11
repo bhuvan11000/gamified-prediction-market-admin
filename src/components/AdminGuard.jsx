@@ -28,7 +28,7 @@ export default function AdminGuard({ children }) {
     return (
       <div className={styles.wrapper}>
         <div className={styles.card}>
-          <h1 className={styles.title}>bet. Admin</h1>
+          <h1 className={styles.title}>Yay or Nay Admin</h1>
           <p className={styles.text}>Sign in with your admin account to continue.</p>
           <form className={styles.form} onSubmit={async (e) => {
             e.preventDefault();

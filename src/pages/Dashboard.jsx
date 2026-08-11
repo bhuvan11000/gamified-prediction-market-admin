@@ -51,7 +51,7 @@ export default function Dashboard() {
   return (
     <div className={styles.page}>
       <h1 className={styles.title}>Dashboard</h1>
-      <p className={styles.subtitle}>Overview of the bet. platform</p>
+      <p className={styles.subtitle}>Overview of the Yay or Nay platform</p>
 
       <div className={styles.grid}>
         {stats.map((s) => (
