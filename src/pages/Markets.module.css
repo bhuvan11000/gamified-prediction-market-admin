@@ -279,3 +279,12 @@
   color: var(--color-no);
   font-weight: 600;
 }
+
+.publishNote {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-top: var(--space-1);
+}

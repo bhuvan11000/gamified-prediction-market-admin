@@ -14,6 +14,161 @@ const MAIN_APP_URL = process.env.MAIN_APP_URL;
 const CRON_SECRET = process.env.CRON_SECRET;
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 const VALID_CATEGORIES = ['sports', 'tech', 'popculture', 'politics', 'memes'];
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+// ── Market generation helpers (run locally, no Netlify timeout) ──
+
+const CATEGORY_KEYWORDS = {
+  sports: ['sport', 'game', 'match', 'nba', 'nfl', 'mlb', 'nhl', 'ufc', 'f1',
+    'tennis', 'soccer', 'football', 'basketball', 'baseball', 'boxing',
+    'championship', 'tournament', 'olympic', 'race', 'goal', 'score'],
+  tech: ['tech', 'apple', 'google', 'microsoft', 'meta', 'tesla', 'ai',
+    'launch', 'product', 'software', 'update', 'release', 'crypto',
+    'blockchain', 'spacex', 'nasa', 'robot', 'quantum', 'chip'],
+  popculture: ['movie', 'film', 'music', 'album', 'concert', 'oscar',
+    'grammy', 'celebrity', 'twitter', 'tiktok', 'youtube', 'netflix',
+    'stream', 'show', 'series', 'gta', 'nintendo', 'playstation', 'xbox'],
+  politics: ['election', 'vote', 'president', 'senate', 'congress',
+    'policy', 'law', 'bill', 'court', 'supreme', 'ukraine', 'russia',
+    'china', 'trade', 'tariff', 'treaty', 'summit', 'minister'],
+};
+
+const BANNED_KEYWORDS = [
+  'kill', 'murder', 'assassinate', 'death of', 'die', 'suicide',
+  'massacre', 'shooting', 'attack', 'bomb', 'terrorist',
+  'porn', 'nude', 'sex tape', 'adult content',
+  'illegal drug', 'child', 'abuse', 'nsfw', 'gore', 'beheading',
+];
+
+function normalizeTitle(title) {
+  return title.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function titleSimilarity(a, b) {
+  const wa = normalizeTitle(a).split(' ');
+  const wb = normalizeTitle(b).split(' ');
+  if (!wa.length || !wb.length) return 0;
+  const overlap = wa.filter(w => w.length > 2 && wb.includes(w)).length;
+  return overlap / Math.max(wa.length, wb.length);
+}
+
+function isQuestion(title) {
+  return title.trim().endsWith('?') && title.trim().length > 5;
+}
+
+function autoAssignCategory(title) {
+  const text = title.toLowerCase();
+  const scores = {};
+  for (const [cat, kws] of Object.entries(CATEGORY_KEYWORDS)) {
+    scores[cat] = kws.filter(kw => text.includes(kw)).length;
+  }
+  const best = Object.entries(scores).sort((a, b) => b[1] - a[1])[0];
+  return best && best[1] > 0 ? best[0] : null;
+}
+
+function containsBannedContent(text) {
+  const lower = text.toLowerCase();
+  return BANNED_KEYWORDS.some(kw => lower.includes(kw));
+}
+
+function validateMarket(market, existingTitles) {
+  const errors = [];
+  if (!market.title || typeof market.title !== 'string') errors.push('Missing title');
+  if (!market.category || typeof market.category !== 'string') errors.push('Missing category');
+  if (!market.resolution_criteria || typeof market.resolution_criteria !== 'string') errors.push('Missing resolution_criteria');
+  if (!market.closes_at || typeof market.closes_at !== 'string') errors.push('Missing closes_at');
+  if (errors.length) return { valid: false, errors };
+
+  if (!isQuestion(market.title)) errors.push('Title must end with ?');
+  if (market.title.length > 200) errors.push('Title too long');
+  if (market.title.length < 10) errors.push('Title too short');
+
+  const closesAt = new Date(market.closes_at);
+  const minDate = new Date(Date.now() + 86400000);
+  const maxDate = new Date(Date.now() + 7 * 86400000);
+  if (isNaN(closesAt.getTime())) errors.push('Invalid closes_at date');
+  else if (closesAt < minDate) errors.push('closes_at must be at least 1 day away');
+  else if (closesAt > maxDate) errors.push('closes_at must be within 7 days');
+
+  if (!VALID_CATEGORIES.includes(market.category)) {
+    const assigned = autoAssignCategory(market.title);
+    if (assigned) market.category = assigned;
+    else errors.push(`Invalid category "${market.category}"`);
+  }
+
+  if (existingTitles.some(t => titleSimilarity(market.title, t) > 0.7)) {
+    errors.push('Too similar to an existing market');
+  }
+
+  if (containsBannedContent(`${market.title} ${market.resolution_criteria}`)) {
+    errors.push('Contains banned content');
+  }
+
+  if (market.resolution_criteria.length < 20) errors.push('Resolution criteria too short');
+
+  return { valid: errors.length === 0, errors };
+}
+
+function buildGenerationPrompt(today, existingTitles) {
+  const titleList = existingTitles.length
+    ? existingTitles.map(t => `- "${t}"`).join('\n')
+    : '- (none)';
+  return `You are a prediction market generator for a game called Yay or Nay.
+
+Today's date: ${today}
+
+Generate exactly 10 prediction markets that resolve within 1-7 days.
+Distribute them across: Sports, Tech & Science, Pop Culture, Politics & World Events, Memes & Fun.
+
+RULES:
+1. Each market MUST be objectively resolvable (clear YES or NO by close date).
+2. Include specific resolution criteria.
+3. Use real, current events.
+4. Avoid: violence, death of specific people, illegal content, explicit content.
+5. Close dates: 1-7 days from today.
+6. Make markets interesting and engaging.
+
+AVOID DUPLICATES — active markets:
+${titleList}
+
+Respond ONLY with a JSON array. Each object: {
+  "title": "Question ending with ?",
+  "category": "sports | tech | popculture | politics | memes",
+  "resolution_criteria": "Specific YES/NO conditions",
+  "closes_at": "ISO 8601 UTC datetime"
+}`;
+}
+
+async function callGeminiDirect(prompt) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      tools: [{ googleSearch: {} }],
+      generationConfig: { temperature: 0.7 },
+    }),
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Gemini error (${response.status}): ${body}`);
+  }
+  const data = await response.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error('Gemini returned empty response');
+  const cleaned = text.replace(/```json\s*/gi, '').replace(/```\s*$/g, '').trim();
+  const markets = JSON.parse(cleaned);
+  if (!Array.isArray(markets)) throw new Error('Gemini response is not an array');
+  return markets;
+}
+
+function nextPublishTime() {
+  const now = new Date();
+  const publish = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 6, 30, 0, 0));
+  if (now >= publish) publish.setUTCDate(publish.getUTCDate() + 1);
+  return publish.toISOString();
+}
 
 function cors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -177,7 +332,99 @@ async function proxyToMain(endpoint, req, res) {
   res.json(data);
 }
 
-app.post('/api/admin-trigger-generation', requireAdmin((req, res) => proxyToMain('generate-markets', req, res)));
+app.post('/api/admin-generate-markets-preview', requireAdmin(async (req, res) => {
+  if (!GEMINI_API_KEY) return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
+
+  const { data: recentMarkets } = await supabaseAdmin
+    .from('markets')
+    .select('title')
+    .in('status', ['open', 'draft'])
+    .gte('created_at', new Date(Date.now() - 7 * 86400000).toISOString())
+    .limit(50);
+
+  const existingTitles = (recentMarkets || []).map(m => m.title);
+  const today = new Date().toISOString().split('T')[0];
+  const prompt = buildGenerationPrompt(today, existingTitles);
+
+  const rawMarkets = await callGeminiDirect(prompt);
+
+  const valid = [];
+  const rejected = [];
+  for (const market of rawMarkets) {
+    const { valid: isValid, errors } = validateMarket(market, existingTitles);
+    if (isValid) valid.push(market);
+    else rejected.push({ ...market, errors });
+  }
+
+  res.json({ valid, rejected, opens_at: nextPublishTime() });
+}));
+
+app.post('/api/admin-save-markets', requireAdmin(async (req, res) => {
+  const { markets } = req.body;
+  if (!markets?.length) return res.status(400).json({ error: 'No markets provided' });
+
+  const opensAt = nextPublishTime();
+  const inserted = [];
+  const insertErrors = [];
+
+  for (const market of markets) {
+    const { data, error } = await supabaseAdmin
+      .from('markets')
+      .insert({
+        title: market.title.trim(),
+        category: market.category,
+        resolution_criteria: market.resolution_criteria.trim(),
+        source: 'ai',
+        status: 'draft',
+        yes_price: 0.50,
+        no_price: 0.50,
+        q_yes: 0,
+        q_no: 0,
+        b: 100,
+        opens_at: opensAt,
+        closes_at: new Date(market.closes_at).toISOString(),
+      })
+      .select('id, title')
+      .single();
+
+    if (error) insertErrors.push({ title: market.title, error: error.message });
+    else inserted.push(data);
+  }
+
+  // Log to market_generation_log
+  await supabaseAdmin.from('market_generation_log').insert({
+    status: inserted.length >= 5 ? 'success' : inserted.length > 0 ? 'partial' : 'failed',
+    markets_generated: inserted.length,
+    markets_rejected: insertErrors.length,
+    error_details: insertErrors.length > 0 ? { insert_errors: insertErrors } : null,
+  });
+
+  res.json({ inserted, errors: insertErrors });
+}));
+
+// ── Admin: Draft Queue (uses service role to bypass RLS) ──
+app.post('/api/admin-drafts', requireAdmin(async (req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from('markets')
+    .select('*')
+    .eq('status', 'draft')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  res.json(data || []);
+}));
+
+app.post('/api/admin-publish-draft', requireAdmin(async (req, res) => {
+  const { market_id } = req.body;
+  if (!market_id) return res.status(400).json({ error: 'market_id required' });
+  const { error } = await supabaseAdmin
+    .from('markets')
+    .update({ status: 'open', opens_at: new Date().toISOString() })
+    .eq('id', market_id)
+    .eq('status', 'draft');
+  if (error) throw error;
+  res.json({ success: true });
+}));
+
 app.post('/api/admin-trigger-season', requireAdmin((req, res) => proxyToMain('season-transition', req, res)));
 app.post('/api/admin-trigger-reset-quests', requireAdmin((req, res) => proxyToMain('reset-quests', req, res)));
 

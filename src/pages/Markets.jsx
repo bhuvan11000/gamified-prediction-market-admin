@@ -54,9 +54,10 @@ export default function Markets() {
 
   const draftQuery = useQuery({
     queryKey: ['markets-drafts'],
-    queryFn: () => supabase.from('markets').select('*').eq('status', 'draft').order('created_at', { ascending: false }),
+    queryFn: () => api.post('/admin-drafts', {}),
     enabled: section === 'drafts',
   });
+
 
   const proposalsQuery = useQuery({
     queryKey: ['pending-proposals'],
@@ -250,14 +251,14 @@ export default function Markets() {
         <div>
           {draftQuery.isLoading ? (
             <div className={styles.loadingWrap}><Spinner size={24} /></div>
-          ) : draftQuery.data?.data?.length === 0 ? (
+          ) : !draftQuery.data?.length ? (
             <div className={styles.emptyState}>
               <Clock size={40} className={styles.emptyIcon} />
               <p>No drafts pending publication.</p>
             </div>
           ) : (
             <div className={styles.queue}>
-              {draftQuery.data?.data?.map((market) => (
+              {draftQuery.data.map((market) => (
                 <div key={market.id} className={styles.marketCard}>
                   <div className={styles.marketHeader}>
                     <h3 className={styles.marketTitle}>{market.title}</h3>
@@ -266,14 +267,32 @@ export default function Markets() {
                   <div className={styles.marketMeta}>
                     <span><strong>Source:</strong> {SOURCE_LABELS[market.source] || market.source}</span>
                     <span><strong>Category:</strong> {market.category}</span>
+                    <span><strong>Closes:</strong> {formatDate(market.closes_at)}</span>
                     <span><strong>Created:</strong> {formatDateTime(market.created_at)}</span>
                   </div>
-                  <p className={styles.marketCriteria}>
-                    <strong>Auto-publishes:</strong> {formatTimeRemaining(market.opens_at)}
+                  <p className={styles.marketCriteria}>{market.resolution_criteria}</p>
+                  <p className={styles.publishNote}>
+                    <Clock size={12} /> Auto-publishes {formatTimeRemaining(market.opens_at)}
                   </p>
                   <div className={styles.marketActions}>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={async () => {
+                        setActing(true);
+                        try {
+                          await api.post('/admin-publish-draft', { market_id: market.id });
+                          addToast('Market published', 'success');
+                          draftQuery.refetch();
+                        } catch (e) { addToast(e.message, 'error'); }
+                        finally { setActing(false); }
+                      }}
+                      disabled={acting}
+                    >
+                      <CheckCircle size={14} /> Publish Now
+                    </Button>
                     <Button variant="danger" size="sm" onClick={() => setConfirmModal({ type: 'delete', marketId: market.id, title: market.title })} disabled={acting}>
-                      <Trash2 size={14} /> Delete Draft
+                      <Trash2 size={14} /> Delete
                     </Button>
                   </div>
                 </div>
@@ -282,6 +301,7 @@ export default function Markets() {
           )}
         </div>
       )}
+
 
       {/* ── DISPUTE RESOLUTION ── */}
       {section === 'review' && (
